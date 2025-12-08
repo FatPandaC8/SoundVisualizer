@@ -1,32 +1,36 @@
 import pygame
+from collections import deque
 import numpy as np
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 400
-SCALE = 120  # line height
+SCALE = 120        # amplitude scale
+NUM_BARS = 200     # number of vertical bars
 
-def render_waveform(screen, wave):
+def render_waveform(screen, bar_heights: deque):
+    """
+    Draw static vertical bars and a wave line that beats up and down like a sine wave.
+    bar_heights: deque of floats between -1 and 1
+    """
     screen.fill((30, 30, 30))  # dark background
-
-    if len(wave) < 2:
-        return
-
     mid_y = SCREEN_HEIGHT // 2
-    TARGET_POINTS = 200  # space out points
-    indices = np.linspace(0, len(wave) - 1, TARGET_POINTS).astype(int)
-    wave_smooth = wave[indices]
+    spacing = SCREEN_WIDTH / NUM_BARS
 
-    # Optional smoothing with moving average
-    wave_smooth = np.convolve(wave_smooth, np.ones(5)/5, mode='same')
+    # Ensure bar_heights is length NUM_BARS
+    if len(bar_heights) != NUM_BARS:
+        indices = np.linspace(0, len(bar_heights)-1, NUM_BARS).astype(int)
+        wave = np.array(bar_heights)[indices]
+    else:
+        wave = np.array(bar_heights)
 
-    spacing = SCREEN_WIDTH / (TARGET_POINTS - 1)
+    # Optional smoothing for sine-like motion
+    wave_smooth = np.convolve(wave, np.ones(5)/5, mode='same')
 
-    last_x = 0
-    last_y = int(mid_y - wave_smooth[0] * SCALE)
-
-    for i in range(1, TARGET_POINTS):
+    # Draw static bars (thin grid lines)
+    for i in range(NUM_BARS):
         x = int(i * spacing)
-        y = int(mid_y - wave_smooth[i] * SCALE)
-        # Draw single wave line
-        pygame.draw.line(screen, (0, 200, 255), (last_x, last_y), (x, y), 2)
-        last_x, last_y = x, y
+        pygame.draw.line(screen, (50, 50, 50), (x, mid_y), (x, mid_y), 1)
+
+    # Draw wave line connecting tops of bars
+    points = [(int(i * spacing), int(mid_y - wave_smooth[i] * SCALE)) for i in range(NUM_BARS)]
+    pygame.draw.lines(screen, (0, 200, 255), False, points, 3)
