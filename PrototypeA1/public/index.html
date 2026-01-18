@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Realtime FFT Visualization</title>
+  <style>
+    body {
+      background: #111;
+      color: white;
+      text-align: center;
+      font-family: sans-serif;
+    }
+    canvas {
+      background: black;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <button id="start">Start</button>
+  <br />
+  <canvas id="canvas" width="800" height="300"></canvas>
+
+  <script>
+    const FFT_SIZE = 1024;
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    document.getElementById("start").onclick = async () => {
+      // flow:
+      // get mic by mediaDevices -> get audio context -> source takes the mediadevices context
+      // connect the source to the analyser
+      // get freq
+      const arrayBuffer = [];
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); // get the media medium: in this case - a mic
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser(); // expose audio time and frequency data and create data visualization
+      source.connect(analyser);
+
+      // For sending
+      const arrayBufferCopy = arrayBuffer.slice(0);
+      const audioBufferDecoded = await audioCtx.decodeAudioData(arrayBufferCopy);
+
+      const audioData = audioBufferDecoded.getChannelData(0); // why get channel 0 ? // send this to backend
+
+      // For drawing
+      analyser.fftSize = FFT_SIZE;
+
+      const freq = new Float32Array(analyser.frequencyBinCount); 
+      fetch("/fft", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+           freq: audioData
+        })
+      }) // send this every second ? -> need websocket
+
+      function draw() {
+        analyser.getFloatFrequencyData(freq);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const barWidth = canvas.width / freq.length;
+
+        for (let i = 0; i < freq.length; i++) {
+          // freq values are in dB: [-100, 0]
+          const value = freq[i];
+          const normalized = (value + 100) / 100; // 0 → 1
+
+          const barHeight = normalized * canvas.height;
+
+          ctx.fillStyle = `hsl(${i / freq.length * 360}, 100%, 50%)`; // hue saturation lightness = HSL
+          ctx.fillRect(
+            i * barWidth,
+            canvas.height - barHeight,
+            barWidth,
+            barHeight
+          );
+        }
+
+        requestAnimationFrame(draw); // guarantee to run this code before repaint (refresh) of a website
+        // call a user-supplied callback function 
+      }
+
+      draw();
+    };
+  </script>
+
+</body>
+</html>
