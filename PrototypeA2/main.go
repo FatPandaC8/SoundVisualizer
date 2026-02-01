@@ -1,12 +1,16 @@
 package main
 
 import (
-	// "fmt"
-	// "math/cmplx"
-	// "shazam/internal"
-	// "log"
-	// "shazam/internal"
+	"fmt"
+	"log"
+	"shazam/internal"
 )
+
+// "fmt"
+// "math/cmplx"
+// "shazam/internal"
+// "log"
+// "shazam/internal"
 
 
 func main() {
@@ -26,5 +30,11 @@ func main() {
 	// 	fmt.Printf("Bin %d: Magnitude=%.2f, Phase=%.2f rad\n", 
 	// 		i, magnitude, phase)
 	// }
+	song, err := internal.ReadWAV("songs/Uoc_Mua.wav")
+	if err != nil {
+		log.Fatal(err)
+	}
+	norm := internal.Normalize(song.Samples)
+	fmt.Println(internal.Downsample(norm))
 }
 

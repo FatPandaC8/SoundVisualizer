@@ -1,5 +1,5 @@
 package internal
-// https://hasan-hasanov.com/post/2023/10/how_to_parse_wav_file/
+// // https://hasan-hasanov.com/post/2023/10/how_to_parse_wav_file/
 
 import (
 	"encoding/binary"
@@ -8,7 +8,7 @@ import (
 	"os"
 )
 
-func ReadWav(filepath string) (*AudioData, error) {
+func ReadWAV(filepath string) (*AudioData, error) {
 	file, err := os.Open(filepath)
 	if err != nil {
 		return nil, err
@@ -71,6 +71,9 @@ func ReadWav(filepath string) (*AudioData, error) {
 
 			readNow, _ := file.Seek(0, io.SeekCurrent)
 			remaining := int64(subchunkSize) - (readNow - start)
+			if remaining % 2 == 1 {
+				remaining++
+			}
 			if remaining > 0 {
 				io.CopyN(io.Discard, file, remaining)
 			}
@@ -83,11 +86,14 @@ func ReadWav(filepath string) (*AudioData, error) {
 			if len(data) == 0 {
 				return nil, fmt.Errorf("no data chunk found")
 			}
-			fmt.Println("Read data bytes:", len(data))
 
 		default:
 			fmt.Println("JUNK")
-			io.CopyN(io.Discard, file, int64(subchunkSize)) // discard this subchunksize as its subchunkID is junk
+			skip := int64(subchunkSize)
+			if skip % 2 == 1 {
+				skip++
+			}
+			io.CopyN(io.Discard, file, skip) // discard this subchunksize as its subchunkID is junk
 		}
 	}
 
@@ -95,21 +101,34 @@ func ReadWav(filepath string) (*AudioData, error) {
 		return nil, fmt.Errorf("compressed WAV not supported (format=%d)", audioFormat)
 	}
 
-	numSamples := len(data) / 2
-	samples = make([]int16, numSamples*int(numChannels))
+	bytesPerSample := int(bitsPerSample / 8)
+	frameCount := len(data) / (bytesPerSample * int(numChannels))
 
-	for i := 0; i < numSamples; i++ {
-		samples[i] = int16(binary.LittleEndian.Uint16(data[i*2 : (i+1)*2]))
+	samples = make([]int16, frameCount*int(numChannels))
+
+	// | i | off | data[off:off+2] | Meaning |
+	// | - | --- | --------------- | ------- |
+	// | 0 | 0   | bytes 0–1       | L0      |
+	// | 1 | 2   | bytes 2–3       | R0      |
+	// | 2 | 4   | bytes 4–5       | L1      |
+	// | 3 | 6   | bytes 6–7       | R1      |
+
+	for i := 0; i < frameCount*int(numChannels); i++ {
+		off := i * bytesPerSample
+		samples[i] = int16(binary.LittleEndian.Uint16(data[off : off+2]))
 	}
 
 	if numChannels == 2 {
-		mono := make([]int16, numSamples)
-		for i := 0; i < numSamples; i++ {
-			mono[i] = (samples[i*2] + samples[i*2 + 1]) / 2
+		mono := make([]int16, frameCount)
+		for i := 0; i < frameCount; i++ {
+			left := samples[i*2]
+			right := samples[i*2+1]
+			mono[i] = int16((int(left) + int(right)) / 2)
 		}
 		samples = mono
 		numChannels = 1
 	}
+
 	duration := float64(len(data)) / float64(byteRate)
 
 	return &AudioData{
@@ -119,4 +138,3 @@ func ReadWav(filepath string) (*AudioData, error) {
 		Duration:   duration,
 	}, nil
 }
-
